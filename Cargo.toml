@@ -1,0 +1,12 @@
+[package]
+name = "clipdecode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nom = "7.1.3"
+nom-derive = "0.10.1"
+log = "0.4.22"
+rusqlite = { version = "0.32.1", features = ["serialize"] }
+flate2 = { version = "1.0.32", features = ["zlib"] }
+num_enum = "0.7.3"

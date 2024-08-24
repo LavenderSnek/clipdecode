@@ -1,0 +1,22 @@
+/target
+.idea/
+.vscode/
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.bak
+*.lnk
+
+# macOS
+.DS_Store
+._*
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
