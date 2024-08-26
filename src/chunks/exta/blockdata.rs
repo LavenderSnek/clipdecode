@@ -1,4 +1,7 @@
-use nom::bytes::complete::{is_not, tag, take, take_while};
+use std::io::Read;
+
+use flate2::read::ZlibDecoder;
+use nom::bytes::complete::{tag, take};
 use nom::combinator::{all_consuming, cond, verify};
 use nom::IResult;
 use nom::multi::many1;
@@ -26,8 +29,8 @@ mod tags {
 }
 
 pub struct BlockData<'a> {
-    // data size: u32
-    pub prefix: [u8; 4], // ?: [x2 07 00 00] (possibly checksum)
+    // data_size: u32
+    pub prefix: [u8; 4], // ?: [4 bytes] (possibly checksum)
     pub zlib_data: &'a [u8],
 }
 
@@ -37,8 +40,8 @@ impl<'a> BlockData<'a> {
         let (remaining, data) = take(size)(i)?;
 
         let (zlib_data, prefix_slice) = take(4u32)(data)?;
-        
-        let (_,_) = tag([0x78])(zlib_data)?; // kind of verify zlib header
+
+        let (_, _) = tag([0x78])(zlib_data)?; // kind of verify zlib header
 
         //---
         let mut prefix = [0u8; 4];
@@ -52,15 +55,14 @@ impl<'a> BlockData<'a> {
 pub struct BlockDataChunk<'a> {
     // size mark: u32 >= 104
     //----
-    // sz + BlockDataBeginChunk utf16be
-    // ?: [16 bytes]
-    // u32: 0 || 1, data does not exist if this is 0, skip to end tag
-    pub data: Option<BlockData<'a>>,
-    // sz + BlockDataEndChunk utf16be
+    // BlockDataBeginChunk : block tag
+    // ???: [16 bytes]
+    // data_flag : u32 == 0 || 1, whether the data section exists
+    pub data: Option<BlockData<'a>>, //< treat as all 0s in decompression if None
+    // BlockDataEndChunk : block tag
 }
 
 impl<'a> BlockDataChunk<'a> {
-    
     fn parse_inner(inp: &'a [u8]) -> IResult<&[u8], Self> {
         let (i, _) = tag(tags::BEGIN_CHUNK.as_slice())(inp)?;
 
@@ -70,58 +72,66 @@ impl<'a> BlockDataChunk<'a> {
         let (i, data) = cond(data_flag == 1, BlockData::parse)(i)?;
 
         let (i, _) = tag(tags::END_CHUNK.as_slice())(i)?;
-        
+
         Ok((i, BlockDataChunk { data }))
     }
-    
+
     pub fn parse(inp: &'a [u8]) -> IResult<&[u8], Self> {
         let (_, size) = verify(be_u32, |x| { *x >= 104 })(inp)?;
-      
+
         let (remaining, inner) = take(size)(inp)?;
         let (inner, _) = be_u32(inner)?; // remove the size byte from inner chunk
-   
+
         let (_, dc) = all_consuming(Self::parse_inner)(inner)?;
-        
+
         Ok((remaining, dc))
+    }
+
+    pub fn decompress(&self) -> Vec<u8> {
+        self.data.as_ref().map_or(vec![0u8; 327680], |d| {
+            let mut buf = Vec::with_capacity(327680);
+            ZlibDecoder::new(d.zlib_data).read_to_end(&mut buf).unwrap();
+            buf
+        })
     }
 }
 
+
 pub struct BlockDataSection<'a> {
     pub chunks: Vec<BlockDataChunk<'a>>, // [BlockDataChunk] many1(Blockdata)?
-    // sz + BlockStatus utf16be
+    // BlockStatus : block tag
     // ?: u32 = 12
     // c1: u32 // one of these might be a chunk count
     // c2: u32
-    // [u8; c1 * c2]
-    // sz + BlockCheckSum utf16be
+    // status_data : [u8; c1 * c2]
+    // BlockCheckSum: block tag
     // ?: u32 = 12
     // c1: u32
     // c2: u32
     // [u8; c1 * c2]
-    // pub checksum_data: [u8; 28|16],
+    // checksum_data: [u8; c1 * c2],
 }
 
 impl<'a> BlockDataSection<'a> {
     fn parse_status_checksum_body(inp: &[u8]) -> IResult<&[u8], &[u8]> {
-        
         let (i, _) = verify(be_u32, |x| { *x == 12 })(inp)?;
         let (i, s1) = be_u32(i)?;
         let (i, s2) = be_u32(i)?;
-        
+
         take(s1 * s2)(i)
     }
- 
+
     pub fn parse(inp: &'a [u8]) -> IResult<&[u8], Self> {
         let (i, chunks) = many1(BlockDataChunk::parse)(inp)?;
-        
+
         // todo: actually use the checksums
-        
+
         let (i, _) = tag(tags::STATUS.as_slice())(i)?;
         let (i, _status) = Self::parse_status_checksum_body(i)?;
 
         let (i, _) = tag(tags::CHECKSUM.as_slice())(i)?;
         let (i, _checksum) = Self::parse_status_checksum_body(i)?;
-        
+
         Ok((i, BlockDataSection { chunks }))
     }
 }

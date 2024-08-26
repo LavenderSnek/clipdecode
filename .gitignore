@@ -1,6 +1,16 @@
 /target
 .idea/
 .vscode/
+tmp/
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+
 
 # Windows
 Thumbs.db

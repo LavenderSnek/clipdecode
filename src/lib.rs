@@ -12,8 +12,6 @@ pub mod util {
     use std::os::unix::fs::FileExt;
     use std::path::Path;
 
-    use flate2::read::ZlibDecoder;
-
     use crate::{BlockDataSection, ClipDb, ClipExtaHeader, ClipHeader, ClipSqliteChunk};
     use crate::dbutil::BorrowedConnection;
 
@@ -71,16 +69,15 @@ pub mod util {
                     let (_, block): (&[u8], BlockDataSection) = BlockDataSection::parse(exta_buf.as_slice()).expect("Failed block parse");
 
                     for (i, chunk) in block.chunks.iter().enumerate() {
-                        match &chunk.data {
-                            None => {}
-                            Some(d) => {
-                                let mut decomp = vec![];
-                                ZlibDecoder::new(d.zlib_data).read_to_end(&mut decomp).unwrap();
-                                std::fs::create_dir_all(out_dir);
-                                let mut out = File::create_new(out_dir.join(format!("layer{id}_off{offset}_chunk{i}")));
-                                out.unwrap().write_all(&decomp).unwrap();
-                            }
-                        }
+                        let mut data = chunk.decompress();
+                        
+                        // dir
+                        let dir = out_dir.join(format!("layer-id_{id}/chunk-offset_{offset}"));
+                        std::fs::create_dir_all(&dir).unwrap();
+                        
+                        // blocks
+                        let out = File::create_new(&dir.join(format!("block_{i:0>5}")));
+                        out.unwrap().write_all(&mut data).unwrap();
                     }
                 }
             }

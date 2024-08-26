@@ -5,9 +5,9 @@ use nom::number::complete::be_u64;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ClipHeader {
-    // MAGIC
+    // CFSCHUNK
     pub filesize: u64,
-    // head_pos
+    // head_pos: u64
     //---
     // CHNKHead
     // data_size: u64 >= 40
