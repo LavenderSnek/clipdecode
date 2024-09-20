@@ -4,12 +4,13 @@ use nom::bytes::complete::{tag, take};
 use nom::combinator::verify;
 use nom::IResult;
 use nom::number::complete::be_u64;
-use crate::BlockDataSection;
+use crate::ExtaOffscreen;
 
-pub mod blockdata;
+pub mod offscreen;
+mod vector;
 
 pub enum ClipExtaBody<'a> {
-    Offscreen(BlockDataSection<'a>), // block data
+    Offscreen(ExtaOffscreen<'a>), // block data
     // VectorObjects,
     // ModelBank3D,
     // ModelLoader3D,

@@ -28,7 +28,7 @@ impl ClipHeader {
         let (i, _) = take(head_pos)(inp)?;
         let (i, _) = tag("CHNKHead")(i)?;
 
-        let (i, _) = verify(be_u64, |x| { *x >= 40 })(i)?;
+        let (i, _) = verify(be_u64, |x| { *x == 40 })(i)?;
         let (i, _) = verify(be_u64, |x| { *x == 256 })(i)?;
 
         let (i, sqlite_chunk_pos) = be_u64(i)?;

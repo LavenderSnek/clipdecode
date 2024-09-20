@@ -97,7 +97,7 @@ impl<'a> BlockDataChunk<'a> {
 }
 
 
-pub struct BlockDataSection<'a> {
+pub struct ExtaOffscreen<'a> {
     pub chunks: Vec<BlockDataChunk<'a>>, // [BlockDataChunk] many1(Blockdata)?
     // BlockStatus : block tag
     // ?: u32 = 12
@@ -112,7 +112,7 @@ pub struct BlockDataSection<'a> {
     // checksum_data: [u8; c1 * c2],
 }
 
-impl<'a> BlockDataSection<'a> {
+impl<'a> ExtaOffscreen<'a> {
     fn parse_status_checksum_body(inp: &[u8]) -> IResult<&[u8], &[u8]> {
         let (i, _) = verify(be_u32, |x| { *x == 12 })(inp)?;
         let (i, s1) = be_u32(i)?;
@@ -132,7 +132,7 @@ impl<'a> BlockDataSection<'a> {
         let (i, _) = tag(tags::CHECKSUM.as_slice())(i)?;
         let (i, _checksum) = Self::parse_status_checksum_body(i)?;
 
-        Ok((i, BlockDataSection { chunks }))
+        Ok((i, ExtaOffscreen { chunks }))
     }
 }
 

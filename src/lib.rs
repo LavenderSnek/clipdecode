@@ -1,4 +1,4 @@
-pub use chunks::exta::blockdata::{BlockData, BlockDataChunk, BlockDataSection};
+pub use chunks::exta::offscreen::{BlockData, BlockDataChunk, ExtaOffscreen};
 pub use chunks::exta::ClipExtaHeader;
 pub use chunks::head::ClipHeader;
 pub use chunks::sqli::{ClipDb, ClipSqliteChunk};
@@ -12,7 +12,7 @@ pub mod util {
     use std::os::unix::fs::FileExt;
     use std::path::Path;
 
-    use crate::{BlockDataSection, ClipDb, ClipExtaHeader, ClipHeader, ClipSqliteChunk};
+    use crate::{ExtaOffscreen, ClipDb, ClipExtaHeader, ClipHeader, ClipSqliteChunk};
     use crate::dbutil::BorrowedConnection;
 
     // panics for everything bc they're just utils for figuring out how the format works
@@ -66,7 +66,7 @@ pub mod util {
                     let body_offset = offset as usize + (512 - rem.len());
                     file.read_exact_at(&mut exta_buf, body_offset as u64).unwrap();
 
-                    let (_, block): (&[u8], BlockDataSection) = BlockDataSection::parse(exta_buf.as_slice()).expect("Failed block parse");
+                    let (_, block): (&[u8], ExtaOffscreen) = ExtaOffscreen::parse(exta_buf.as_slice()).expect("Failed block parse");
 
                     for (i, chunk) in block.chunks.iter().enumerate() {
                         let mut data = chunk.decompress();
