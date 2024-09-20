@@ -35,22 +35,28 @@ impl FromSql for CanvasUnit {
 }
 
 impl<'a> ClipDb<'a> {
+    /// The raw image preview data for the given canvas
+    pub fn get_preview_image_for_canvas(&self, canvas_id: i64) -> Option<Vec<u8>> {
+        let stmt = self.conn().prepare_cached("SELECT ImageData from CanvasPreview where CanvasId=?1");
+
+        stmt.unwrap().query_row([canvas_id], |r| {
+            let v = r.get(0).unwrap();
+            Ok(v)
+        }).ok()
+    }
+
     /// returns a list of all available canvas ids
     pub fn get_canvas_ids(&self) -> Vec<i64> {
         let stmt = self.conn().prepare_cached("SELECT MainId from Canvas");
 
         stmt.unwrap().query_map([], |r| {
             Ok(r.get(0)?)
-        })
-            .unwrap()
-            .map(|r| { r.unwrap() })
-            .collect()
+        }).unwrap().map(|r| { r.unwrap() }).collect()
     }
 
     /// get the canvas for the given canvas ID
     pub fn get_canvas(&self, canvas_id: i64) -> Option<Canvas> {
-        let stmt = self.conn()
-            .prepare_cached("SELECT \
+        let stmt = self.conn().prepare_cached("SELECT \
                 MainId, \
                 CanvasUnit, \
                 CanvasWidth, \
@@ -70,6 +76,4 @@ impl<'a> ClipDb<'a> {
             })
         }).ok()
     }
-    
-    
 }

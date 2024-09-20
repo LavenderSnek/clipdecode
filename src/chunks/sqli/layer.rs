@@ -15,10 +15,10 @@ pub enum FilterLayerInfo {
     // kind: u32
     // size: u32
     // data
-    BrightnessContrast { brightness: i32, contrast: i32 }, // 1
+    BrightnessContrast(i32, i32), // 1
     LevelCorrection, // 2 todo
     ToneCurve, // 3 todo
-    Hsl { hue: i32, saturation: i32, luminosity: i32 }, // 4
+    Hsl(i32, i32, i32), // 4
     ColorBalance, // 5 todo
     ReverseGradient, // 6
     Posterization(u32), // 7
@@ -31,7 +31,7 @@ impl FilterLayerInfo {
     fn parse_brightness_contrast(data: &[u8]) -> IResult<&[u8], Self> {
         let (i, brightness) = be_i32(data)?;
         let (i, contrast) = be_i32(i)?;
-        Ok((i, FilterLayerInfo::BrightnessContrast { brightness, contrast }))
+        Ok((i, FilterLayerInfo::BrightnessContrast(brightness, contrast)))
     }
 
     fn parse_level_correction(data: &[u8]) -> IResult<&[u8], Self> {
@@ -46,7 +46,7 @@ impl FilterLayerInfo {
         let (i, h) = be_i32(data)?;
         let (i, s) = be_i32(i)?;
         let (i, l) = be_i32(i)?;
-        Ok((i, FilterLayerInfo::Hsl { hue: h, saturation: s, luminosity: l }))
+        Ok((i, FilterLayerInfo::Hsl(h, s, l)))
     }
 
     fn parse_color_balance(data: &[u8]) -> IResult<&[u8], Self> {
@@ -170,10 +170,7 @@ impl<'a> ClipDb<'a> {
 
         stmt.unwrap().query_map([layer_id], |r| {
             Ok(r.get(0)?)
-        })
-            .unwrap()
-            .map(|r| { r.unwrap() })
-            .collect()
+        }).unwrap().map(|r| { r.unwrap() }).collect()
     }
 
     pub fn get_offscreen_exta_offsets(&self, layer_id: i64) -> Vec<i64> {
@@ -186,16 +183,12 @@ impl<'a> ClipDb<'a> {
 
         stmt.unwrap().query_map([canvas_id], |r| {
             Ok(r.get(0)?)
-        })
-            .unwrap()
-            .map(|r| { r.unwrap() })
-            .collect()
+        }).unwrap().map(|r| { r.unwrap() }).collect()
     }
 
     /// gets the layer for the given ID if any
     pub fn get_layer(&self, layer_id: i64) -> Option<Layer> {
-        let stmt = self.conn()
-            .prepare_cached("SELECT \
+        let stmt = self.conn().prepare_cached("SELECT \
                 MainId, \
                 CanvasId, \
                 LayerName, \
