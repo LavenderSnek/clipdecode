@@ -51,6 +51,23 @@ impl<'a> BlockData<'a> {
     }
 }
 
+pub struct DecompressedBlockData {
+    pub data: Vec<u8>,
+}
+
+impl DecompressedBlockData {
+    /// raw grayscale pixel data for the transparency mask (single channel)
+    pub fn transparency(&self) -> &[u8; 0x10000] {
+        assert_eq!(self.data.len(), 0x10000 * 5);
+        self.data[..0x10000].try_into().unwrap()
+    }
+
+    /// raw pixel data in BGRX format (3 + 1 channels)
+    pub fn color(&self) ->  &[u8; 0x10000 * 4] {
+        assert_eq!(self.data.len(), 0x10000 * 5);
+        self.data[0x10000..].try_into().unwrap()
+    }
+}
 
 pub struct BlockDataChunk<'a> {
     // size mark: u32 >= 104
@@ -87,11 +104,11 @@ impl<'a> BlockDataChunk<'a> {
         Ok((remaining, dc))
     }
 
-    pub fn decompress(&self) -> Vec<u8> {
-        self.data.as_ref().map_or(vec![0u8; 327680], |d| {
-            let mut buf = Vec::with_capacity(327680);
+    pub fn decompress(&self) -> DecompressedBlockData {
+        self.data.as_ref().map_or(DecompressedBlockData { data: vec![0u8; 0x10000 * 5] }, |d| {
+            let mut buf = Vec::with_capacity(0x10000 * 5);
             ZlibDecoder::new(d.zlib_data).read_to_end(&mut buf).unwrap();
-            buf
+            DecompressedBlockData { data: buf }
         })
     }
 }

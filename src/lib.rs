@@ -11,7 +11,10 @@ pub mod util {
     use std::io::{Read, Seek, SeekFrom, Write};
     use std::os::unix::fs::FileExt;
     use std::path::Path;
-
+    use opencv::{imgcodecs, imgproc};
+    use opencv::core::Vector;
+    use opencv::imgproc::cvt_color;
+    use opencv::prelude::*;
     use crate::{ExtaOffscreen, ClipDb, ClipExtaHeader, ClipHeader, ClipSqliteChunk};
     use crate::dbutil::BorrowedConnection;
 
@@ -76,8 +79,15 @@ pub mod util {
                         std::fs::create_dir_all(&dir).unwrap();
                         
                         // blocks
-                        let out = File::create_new(&dir.join(format!("block_{i:0>5}")));
-                        out.unwrap().write_all(&mut data).unwrap();
+
+                        let transparency = Mat::from_slice(data.transparency()).unwrap().reshape(1, 256).unwrap().clone_pointee();
+                        imgcodecs::imwrite(&dir.join(format!("block_{i:0>5}_tra.png")).to_str().unwrap(), &transparency, &Vector::new()).unwrap();
+
+                        let color_bgrx = Mat::from_slice(data.color()).unwrap().reshape(4, 256).unwrap().clone_pointee();
+                        let mut color_bgr = Mat::zeros(256, 256, opencv::core::CV_8UC3).unwrap().to_mat().unwrap();
+                        cvt_color(&color_bgrx, &mut color_bgr, imgproc::COLOR_BGRA2BGR, 0).unwrap(); // idk
+
+                        imgcodecs::imwrite(&dir.join(format!("block_{i:0>5}_col.png")).to_str().unwrap(), &color_bgr, &Vector::new()).unwrap();
                     }
                 }
             }

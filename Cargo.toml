@@ -10,3 +10,4 @@ log = "0.4.22"
 rusqlite = { version = "0.32.1", features = ["serialize"] }
 flate2 = { version = "1.0.32", features = ["zlib"] }
 num_enum = "0.7.3"
+opencv = { version = "0.93.3", features = ["clang-runtime"] }
