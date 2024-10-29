@@ -128,13 +128,22 @@ impl FromSql for LayerBlendMode {
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, TryFromPrimitive)]
 #[repr(i64)]
-pub enum LayerKind {
+pub enum LayerKind { // todo: nevermind this is completely wrong (seems to be + 2 for masked???)
     Dummy = 256, // root folder
     Paper = 1584, // paper layer, only one per canvas
-    Other = 0, // vector, folder, 3d, folder, frame folder
+
+    // vector, folder, 3d, folder, frame folder, gradient, fill, tone
+    Other = 0,
+    OtherMasked = 2,
+
+    // raster
     Raster = 1,
-    Fill = 2, // gradient, fill, tone
-    Filter = 4098,
+    RasterMasked = 3,
+
+    // filter
+    Filter = 4096,
+    FilterMasked = 4098,
+    
     #[num_enum(catch_all)]
     Unknown(i64),
 }

@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::fs::File;
+use std::io::{Read, Write};
 
 use flate2::read::ZlibDecoder;
 use nom::bytes::complete::{tag, take};
@@ -107,6 +108,7 @@ impl<'a> BlockDataChunk<'a> {
     pub fn decompress(&self) -> DecompressedBlockData {
         self.data.as_ref().map_or(DecompressedBlockData { data: vec![0u8; 0x10000 * 5] }, |d| {
             let mut buf = Vec::with_capacity(0x10000 * 5);
+            // todo: this breaks on masked images (need to figure how images are differentiated)
             ZlibDecoder::new(d.zlib_data).read_to_end(&mut buf).unwrap();
             DecompressedBlockData { data: buf }
         })
