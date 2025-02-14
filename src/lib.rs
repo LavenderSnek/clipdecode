@@ -39,6 +39,7 @@ pub mod util {
     }
 
     pub fn export_clip_sqlite(clip_file: &mut File, sql_out: &Path) {
+        std::fs::create_dir_all(sql_out.parent().unwrap()).expect("failed to create dir");
         with_clip_file(clip_file, |_, sqlite_data, _| {
             let mut out = File::create_new(sql_out).unwrap();
             out.write_all(sqlite_data).unwrap();
@@ -73,11 +74,11 @@ pub mod util {
 
                     for (i, chunk) in block.chunks.iter().enumerate() {
                         let mut data = chunk.decompress();
-                        
+
                         // dir
                         let dir = out_dir.join(format!("layer-id_{id}/chunk-offset_{offset}"));
                         std::fs::create_dir_all(&dir).unwrap();
-                        
+
                         // blocks
 
                         let transparency = Mat::from_slice(data.transparency()).unwrap().reshape(1, 256).unwrap().clone_pointee();

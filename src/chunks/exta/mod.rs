@@ -7,7 +7,7 @@ use nom::number::complete::be_u64;
 use crate::ExtaOffscreen;
 
 pub mod offscreen;
-mod vector;
+pub mod vector;
 
 pub enum ClipExtaBody<'a> {
     Offscreen(ExtaOffscreen<'a>), // block data

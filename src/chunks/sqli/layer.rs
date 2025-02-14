@@ -186,6 +186,10 @@ impl<'a> ClipDb<'a> {
         self.get_ext_id_offsets_for_layer("Offscreen", "BlockData", layer_id)
     }
 
+    pub fn get_offscreen_vector_offsets(&self, layer_id: i64) -> Vec<i64> {
+        self.get_ext_id_offsets_for_layer("VectorObjectList", "VectorData", layer_id)
+    }
+
     /// gets layers in the canvas with the given canvas ID
     pub fn get_layer_ids_for_canvas(&self, canvas_id: i64) -> Vec<i64> {
         let stmt = self.conn.prepare_cached("SELECT MainId FROM Layer WHERE CanvasId=?1");
