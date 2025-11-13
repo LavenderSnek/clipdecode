@@ -1,5 +1,3 @@
-
-
 pub struct ExtaVector {
     // header_size? : u32 = 88
     // ? : u32 = 72

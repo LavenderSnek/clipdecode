@@ -9,10 +9,10 @@ import pathlib
 
 @dataclass
 class ClipImg:
-    transparency: Image
-    color: Image
+    transparency: Image.Image
+    color: Image.Image
 
-    def merged(self) -> Image:
+    def merged(self) -> Image.Image:
         img = self.color.copy()
         img.putalpha(self.transparency)
         return img
@@ -76,6 +76,3 @@ if __name__ == '__main__':
 
     i = decode_offscreen_chunk_from_dir(w, h, in_dir)
     i.save_to_dir(out_dir)
-
-
-
