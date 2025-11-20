@@ -133,6 +133,7 @@ impl<'a> ClipDb<'a> {
     }
 
     /// get external chunk offset for the given external id
+    /// the chunk may not actually exist in the file
     pub fn get_exta_chunk_offset(&self, id: ExtaChunkId) -> Result<i64, rusqlite::Error> {
         let stmt = self
             .conn

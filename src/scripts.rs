@@ -76,9 +76,11 @@ pub fn splat_layer_exta<R: Read + Seek, P: AsRef<std::path::Path>>(
 
         o.attribute.write(&mut attr).map_err(into_io_err)?;
 
-        let offset = db
-            .get_exta_chunk_offset(o.exta_id.clone())
-            .map_err(into_io_err)?;
+        let exta_off = db.get_exta_chunk_offset(o.exta_id.clone());
+        let Ok(offset) = exta_off else {
+            continue;
+        };
+
         clip.seek(SeekFrom::Start(offset as _))?;
 
         let _ = ExtaChunkHeader::read(clip).map_err(into_io_err)?;
