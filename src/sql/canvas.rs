@@ -1,4 +1,4 @@
-use crate::sql::ClipDb;
+use crate::sql::{CanvasId, ClipDb, LayerId};
 use num_enum::TryFromPrimitive;
 use rusqlite::{
     types::{FromSql, FromSqlError, FromSqlResult, ValueRef},
@@ -14,8 +14,8 @@ pub struct Canvas {
     pub resolution: f64,
     pub channel_bytes: i64,
     // default_channel_order: i64,
-    pub root_folder_id: i64,
-    pub current_layer_id: i64,
+    pub root_folder_id: LayerId,
+    pub current_layer_id: LayerId,
     // there's more but idk what they mean yet
 }
 
@@ -54,7 +54,7 @@ impl FromSql for CanvasUnit {
 
 pub struct CanvasPreview {
     pub id: i64,
-    pub canvas_id: i64,
+    pub canvas_id: CanvasId,
     pub image_type: i64,
     pub image_width: i64,
     pub image_height: i64,
@@ -75,30 +75,36 @@ impl CanvasPreview {
 }
 
 impl<'a> ClipDb<'a> {
-    /// The raw image preview data for the given canvas
-    pub fn get_preview_image_for_canvas(
-        &self,
-        canvas_id: i64,
-    ) -> Result<CanvasPreview, rusqlite::Error> {
-        let stmt = self
-            .conn()
-            .prepare_cached("SELECT * from CanvasPreview where CanvasId=?1");
-
-        stmt?.query_row([canvas_id], CanvasPreview::from_row)
-    }
-
     /// returns a list of all available canvas ids
-    pub fn get_canvas_ids(&self) -> Result<Vec<i64>, rusqlite::Error> {
+    pub fn get_canvas_ids(&self) -> Result<Vec<CanvasId>, rusqlite::Error> {
         let stmt = self.conn().prepare_cached("SELECT MainId from Canvas");
         stmt?.query_map([], |r| r.get(0))?.collect()
     }
 
     /// get the canvas for the given canvas ID
-    pub fn get_canvas(&self, canvas_id: i64) -> Result<Canvas, rusqlite::Error> {
+    pub fn get_canvas(&self, id: CanvasId) -> Result<Canvas, rusqlite::Error> {
         let stmt = self
             .conn()
             .prepare_cached("SELECT * FROM Canvas WHERE MainId=?1");
 
-        stmt?.query_row([canvas_id], Canvas::from_row)
+        stmt?.query_row([id.0], Canvas::from_row)
+    }
+
+    /// gets layers in the canvas with the given canvas ID
+    pub fn get_layer_ids_for_canvas(&self, id: CanvasId) -> Result<Vec<LayerId>, rusqlite::Error> {
+        let stmt = self
+            .conn
+            .prepare_cached("SELECT MainId FROM Layer WHERE CanvasId=?1");
+
+        stmt?.query_map([id.0], |r| r.get(0))?.collect()
+    }
+
+    /// The raw image preview data for the given canvas
+    pub fn get_preview_for_canvas(&self, id: CanvasId) -> Result<CanvasPreview, rusqlite::Error> {
+        let stmt = self
+            .conn()
+            .prepare_cached("SELECT * from CanvasPreview where CanvasId=?1");
+
+        stmt?.query_row([id.0], CanvasPreview::from_row)
     }
 }

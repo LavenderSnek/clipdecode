@@ -1,8 +1,46 @@
-use rusqlite::Connection;
+use rusqlite::{
+    types::{FromSql, FromSqlError},
+    Connection,
+};
 
-mod canvas;
-mod dbutil;
-mod layer;
+pub mod canvas;
+pub(crate) mod dbutil;
+pub mod external;
+pub mod layer;
+
+macro_rules! def_sql_id {
+    ($tp_name:ident) => {
+        #[repr(transparent)]
+        #[derive(Debug, Eq, PartialEq, Copy, Clone)]
+        pub struct $tp_name(pub i64);
+
+        impl rusqlite::types::FromSql for $tp_name {
+            fn column_result(
+                value: rusqlite::types::ValueRef<'_>,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                Ok($tp_name(value.as_i64()?))
+            }
+        }
+    };
+}
+
+def_sql_id!(CanvasId);
+def_sql_id!(LayerId);
+def_sql_id!(OffscreenId);
+def_sql_id!(VectorObjListId);
+
+#[repr(transparent)]
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ExtaChunkId(pub String);
+
+impl FromSql for ExtaChunkId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let s = value.as_blob()?.to_vec();
+        Ok(ExtaChunkId(
+            String::from_utf8(s).map_err(|e| FromSqlError::Other(Box::new(e)))?,
+        ))
+    }
+}
 
 // db wrapper for csp
 pub struct ClipDb<'a> {
@@ -18,19 +56,6 @@ impl<'a> ClipDb<'a> {
 impl<'a> ClipDb<'a> {
     pub fn conn(&self) -> &Connection {
         self.conn
-    }
-
-    /// get external chunk offset for the given external id
-    pub fn get_exta_chunk_offset(&self, ext_id: &str) -> Option<i64> {
-        let stmt = self
-            .conn
-            .prepare_cached("SELECT Offset FROM ExternalChunk WHERE ExternalID=?1");
-        stmt.unwrap()
-            .query_row([ext_id], |r| {
-                let v: i64 = r.get(0).unwrap();
-                Ok(v)
-            })
-            .ok()
     }
 
     /// checks whether a table exists

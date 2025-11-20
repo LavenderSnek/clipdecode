@@ -1,31 +1,6 @@
 use binrw::{binread, binwrite, BinRead};
 
-fn make_blockdata_tag_bytes(s: &str) -> Vec<u8> {
-    let mut utf16_bytes: Vec<u8> = s.encode_utf16().flat_map(|x| x.to_be_bytes()).collect();
-    let mut bytes = (s.len() as u32).to_be_bytes().to_vec();
-    bytes.append(&mut utf16_bytes);
-
-    return bytes;
-}
-
-#[binrw::parser(reader)]
-fn parse_blockdata_tag(s: &str) -> binrw::BinResult<Vec<u8>> {
-    let expected = make_blockdata_tag_bytes(s);
-
-    let rpos = reader.stream_position()?;
-
-    let mut buf = vec![0u8; expected.len()];
-    reader.read_exact(&mut buf)?;
-
-    if buf == expected {
-        Ok(buf)
-    } else {
-        Err(binrw::Error::BadMagic {
-            pos: rpos,
-            found: Box::new(buf),
-        })
-    }
-}
+use crate::parse_utl::Utf16BeTag;
 
 #[binread]
 #[binwrite]
@@ -35,10 +10,8 @@ pub struct BlockDataChunk {
     #[bw(calc = self.calc_size())]
     _size: u32, // size of the chunk, including the size itself
 
-    #[br(temp, args("BlockDataBeginChunk"))]
-    #[br(parse_with = parse_blockdata_tag)]
-    #[bw(calc = make_blockdata_tag_bytes("BlockDataBeginChunk"))]
-    _begin_chunk: Vec<u8>,
+    #[brw(args("BlockDataBeginChunk"))]
+    tag_begin: Utf16BeTag,
 
     pub unknown: [u8; 16],
 
@@ -49,20 +22,18 @@ pub struct BlockDataChunk {
     #[br(if(data_flag == 1))]
     pub data: Option<BlockData>,
 
-    #[br(temp, args("BlockDataEndChunk"))]
-    #[br(parse_with = parse_blockdata_tag)]
-    #[bw(calc = make_blockdata_tag_bytes("BlockDataEndChunk"))]
-    _end_chunk: Vec<u8>,
+    #[brw(args("BlockDataEndChunk"))]
+    tag_end: Utf16BeTag,
 }
 
 impl BlockDataChunk {
     fn calc_size(&self) -> u32 {
         4 // size
-            + make_blockdata_tag_bytes("BlockDataBeginChunk").len() as u32
+            + self.tag_begin.calc_size()
             + self.unknown.len() as u32
             + 4 // data flag
             + self.data.as_ref().map_or(0, |d| d.calc_size()) as u32
-            + make_blockdata_tag_bytes("BlockDataEndChunk").len() as u32
+            + self.tag_end.calc_size()
     }
 }
 
@@ -95,10 +66,8 @@ impl BlockData {
 #[brw(big)]
 #[derive(Debug)]
 pub struct BlockStatus {
-    #[br(temp, args("BlockStatus"))]
-    #[br(parse_with = parse_blockdata_tag)]
-    #[bw(calc = make_blockdata_tag_bytes("BlockStatus"))]
-    _tag: Vec<u8>,
+    #[brw(args("BlockStatus"))]
+    tag: Utf16BeTag,
 
     #[br(temp, assert(_v12 == 12))]
     #[bw(calc = 12)]
@@ -121,10 +90,8 @@ pub struct BlockStatus {
 #[brw(big)]
 #[derive(Debug)]
 pub struct BlockChecksum {
-    #[br(temp, args("BlockCheckSum"))]
-    #[br(parse_with = parse_blockdata_tag)]
-    #[bw(calc = make_blockdata_tag_bytes("BlockCheckSum"))]
-    _tag: Vec<u8>,
+    #[brw(args("BlockCheckSum"))]
+    tag: Utf16BeTag,
 
     #[br(temp, assert(_v12 == 12))]
     #[bw(calc = 12)]

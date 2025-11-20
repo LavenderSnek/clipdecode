@@ -1,7 +1,7 @@
 use rusqlite::Row;
 use std::io::Cursor;
 
-use crate::sql::ClipDb;
+use crate::sql::{ClipDb, LayerId, OffscreenId, VectorObjListId};
 use binrw::{binread, binwrite, BinRead};
 use num_enum::TryFromPrimitive;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -149,17 +149,26 @@ impl FromSql for LayerKind {
 
 // todo: needs more decoding
 pub struct Layer {
-    pub id: i64,
+    pub id: LayerId,
     pub canvas_id: i64,
     pub name: String,
     pub kind: LayerKind,
 
     pub opacity: i64, // this actually only goes to 256
     pub composite: LayerBlendMode,
+    pub clipped: bool,
+
+    pub alpha_locked: bool,
+    pub locked: bool,
+
+    // if (layerusepalletecolor) pallete color : option<color>
+    pub filter_layer_info: Option<FilterLayerInfo>,
 }
 
 impl Layer {
     fn from_row(r: &Row) -> Result<Layer, rusqlite::Error> {
+        let lock: u32 = r.get("LayerLock")?;
+
         Ok(Layer {
             id: r.get("MainId")?,
             canvas_id: r.get("CanvasId")?,
@@ -167,61 +176,53 @@ impl Layer {
             kind: r.get("LayerType")?,
             opacity: r.get("LayerOpacity")?,
             composite: r.get("LayerComposite")?,
+            clipped: r.get("LayerClip")?,
+
+            alpha_locked: lock & 16 != 0,
+            locked: lock & 1 != 0,
+
+            filter_layer_info: r.get("FilterLayerInfo")?,
         })
     }
 }
 
 impl<'a> ClipDb<'a> {
-    fn get_ext_id_offsets_for_layer(
-        &self,
-        table_name: &str,
-        ext_id_colum_name: &str,
-        layer_id: i64,
-    ) -> Result<Vec<i64>, rusqlite::Error> {
-        if !self.table_exists(table_name) {
-            return Ok(vec![]);
-        }
-
-        // i give up- im bored with sql
-        let stmt = self.conn.prepare_cached(&format!(
-            "select ExternalChunk.Offset from ExternalChunk \
-            inner join {table_name} on hex(ExternalChunk.ExternalID) = hex({table_name}.{ext_id_colum_name}) \
-            where {table_name}.LayerId = ?1"
-        ));
-
-        stmt?.query_map([layer_id], |r| r.get(0))?.collect()
-    }
-
-    pub fn get_offscreen_exta_offsets(&self, layer_id: i64) -> Result<Vec<i64>, rusqlite::Error> {
-        self.get_ext_id_offsets_for_layer("Offscreen", "BlockData", layer_id)
-    }
-
-    pub fn get_offscreen_vector_offsets(&self, layer_id: i64) -> Result<Vec<i64>, rusqlite::Error> {
-        self.get_ext_id_offsets_for_layer("VectorObjectList", "VectorData", layer_id)
-    }
-
-    /// gets layers in the canvas with the given canvas ID
-    pub fn get_layer_ids_for_canvas(&self, canvas_id: i64) -> Result<Vec<i64>, rusqlite::Error> {
-        let stmt = self
-            .conn
-            .prepare_cached("SELECT MainId FROM Layer WHERE CanvasId=?1");
-
-        stmt?.query_map([canvas_id], |r| r.get(0))?.collect()
-    }
-
     /// gets the layer for the given ID
-    pub fn get_layer(&self, layer_id: i64) -> Result<Layer, rusqlite::Error> {
+    pub fn get_layer(&self, id: LayerId) -> Result<Layer, rusqlite::Error> {
         let stmt = self
             .conn()
             .prepare_cached("SELECT * FROM Layer WHERE MainId=?1");
 
-        stmt?.query_row([layer_id], Layer::from_row)
+        stmt?.query_row([id.0], Layer::from_row)
     }
 
-    pub fn get_fiter_layer_info(&self, layer_id: i64) -> Result<FilterLayerInfo, rusqlite::Error> {
+    pub fn get_offscreen_ids_for_layer(
+        &self,
+        id: LayerId,
+    ) -> Result<Vec<OffscreenId>, rusqlite::Error> {
+        if !self.table_exists("Offscreen") {
+            return Ok(vec![]);
+        }
+
         let stmt = self
-            .conn()
-            .prepare_cached("SELECT FilterLayerInfo FROM Layer WHERE MainId=?1");
-        stmt?.query_row([layer_id], |r| r.get(0))
+            .conn
+            .prepare_cached("SELECT MainId FROM Offscreen WHERE LayerId=?1");
+
+        stmt?.query_map([id.0], |r| r.get(0))?.collect()
+    }
+
+    pub fn get_vector_obj_list_ids_for_layer(
+        &self,
+        id: LayerId,
+    ) -> Result<Vec<VectorObjListId>, rusqlite::Error> {
+        if !self.table_exists("VectorObjectList") {
+            return Ok(vec![]);
+        }
+
+        let stmt = self
+            .conn
+            .prepare_cached("SELECT MainId FROM VectorObjectList WHERE LayerId=?1");
+
+        stmt?.query_map([id.0], |r| r.get(0))?.collect()
     }
 }
