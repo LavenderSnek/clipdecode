@@ -1,7 +1,7 @@
 use rusqlite::Row;
 use std::io::Cursor;
 
-use crate::sql::{ClipDb, LayerId, OffscreenId, VectorObjListId};
+use crate::sql::{ClipDb, LayerId, MipmapId, OffscreenId, VectorObjListId};
 use binrw::{binread, binwrite, BinRead};
 use num_enum::TryFromPrimitive;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -154,12 +154,15 @@ pub struct Layer {
     pub name: String,
     pub kind: LayerKind,
 
-    pub opacity: i64, // this actually only goes to 256
+    pub opacity: i64, // only goes to 256
     pub composite: LayerBlendMode,
     pub clipped: bool,
 
     pub alpha_locked: bool,
     pub locked: bool,
+
+    pub render_mipmap_id: MipmapId,
+    pub mask_mipmap_id: MipmapId,
 
     // if (layerusepalletecolor) pallete color : option<color>
     pub filter_layer_info: Option<FilterLayerInfo>,
@@ -181,7 +184,11 @@ impl Layer {
             alpha_locked: lock & 16 != 0,
             locked: lock & 1 != 0,
 
-            filter_layer_info: r.get("FilterLayerInfo")?,
+            render_mipmap_id: r.get("LayerRenderMipmap")?,
+            mask_mipmap_id: r.get("LayerLayerMaskMipmap")?,
+
+            // todo: add check for table not existing vs parse error
+            filter_layer_info: r.get("FilterLayerInfo").ok(), // might not exist
         })
     }
 }
@@ -224,5 +231,16 @@ impl<'a> ClipDb<'a> {
             .prepare_cached("SELECT MainId FROM VectorObjectList WHERE LayerId=?1");
 
         stmt?.query_map([id.0], |r| r.get(0))?.collect()
+    }
+
+    pub fn get_base_mipmap_offscreen(&self, id: MipmapId) -> Result<OffscreenId, rusqlite::Error> {
+        let stmt = self.conn.prepare_cached(
+            "SELECT Offscreen
+            FROM MipmapInfo info
+            INNER JOIN Mipmap mip
+            ON info.MainId = mip.BaseMipmapInfo WHERE mip.MainId = ?1;",
+        );
+
+        stmt?.query_row([id.0], |r| r.get(0))
     }
 }

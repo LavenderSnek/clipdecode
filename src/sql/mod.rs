@@ -28,6 +28,7 @@ def_sql_id!(CanvasId);
 def_sql_id!(LayerId);
 def_sql_id!(OffscreenId);
 def_sql_id!(VectorObjListId);
+def_sql_id!(MipmapId);
 
 #[repr(transparent)]
 #[derive(Debug, Eq, PartialEq, Clone)]

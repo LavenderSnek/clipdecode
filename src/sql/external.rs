@@ -38,7 +38,10 @@ pub struct OffscreenParameter {
     #[brw(args("Parameter"))]
     tag: Utf16BeTag,
 
-    #[br(count = size - tag.calc_size())]
+    pub width: u32,
+    pub height: u32,
+
+    #[br(count = size - tag.calc_size() - 8)]
     pub data: Vec<u8>,
 }
 

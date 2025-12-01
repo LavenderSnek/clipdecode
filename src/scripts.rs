@@ -1,12 +1,13 @@
 use crate::chunk::*;
 use crate::exta::offscreen::ExtaOffscreen;
-use crate::sql::external::{OffscreenMeta, VectorObjListMeta};
-use crate::sql::{ClipDb, LayerId};
+use crate::sql::external::VectorObjListMeta;
+use crate::sql::{ClipDb, LayerId, OffscreenId};
 use binrw::{BinRead, BinWrite};
 use flate2::read::ZlibDecoder;
+use image::ExtendedColorType;
 use rusqlite::Connection;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::{error, fs, io};
+use std::{error, fs, io, u8};
 
 fn into_io_err<E>(e: E) -> io::Error
 where
@@ -30,13 +31,71 @@ pub fn export_sqlite<R: Read + Seek, W: Write>(src: &mut R, dst: &mut W) -> std:
     Ok(())
 }
 
+pub fn splat_offsc<R: Read + Seek, P: AsRef<std::path::Path>>(
+    db: &ClipDb,
+    offsc: OffscreenId,
+    clip: &mut R,
+    out_dir: P,
+    has_color: bool,
+) -> std::io::Result<()> {
+    fs::create_dir_all(&out_dir)?;
+
+    let meta = db.get_offscreen_meta(offsc).map_err(into_io_err)?;
+
+    let mut attr = fs::File::create(
+        out_dir
+            .as_ref()
+            .join(format!("{}.offsc_attr.bin", meta.exta_id.0)),
+    )?;
+
+    meta.attribute.write(&mut attr).map_err(into_io_err)?;
+
+    let exta_off = db.get_exta_chunk_offset(meta.exta_id.clone());
+    let Ok(offset) = exta_off else {
+        return Ok(());
+    };
+
+    clip.seek(SeekFrom::Start(offset as _))?;
+
+    let _ = ExtaChunkHeader::read(clip).map_err(into_io_err)?;
+    let body = ExtaOffscreen::read(clip).map_err(into_io_err)?;
+
+    for (i, b) in body.blocks.into_iter().enumerate() {
+        let transp = out_dir.as_ref().join(format!("tr_{:03}.png", i));
+        let col = out_dir.as_ref().join(format!("col_{:03}.png", i));
+
+        let Some(data) = b.data else {
+            fs::File::create(&transp)?;
+            fs::File::create(&col)?;
+            continue;
+        };
+
+        let mut dec = ZlibDecoder::new(data.compressed_data.as_slice());
+        let mut buffer = Vec::new();
+        dec.read_to_end(&mut buffer)?;
+
+        image::save_buffer(&transp, &buffer[..0x10000], 256, 256, ExtendedColorType::L8).unwrap();
+
+        if has_color {
+            for v in &mut buffer[0x10000..].chunks_exact_mut(4) {
+                v.swap(0, 2); // bgr -> rgb
+                v[3] = u8::MAX; // set alpha
+            }
+            image::save_buffer(&col, &buffer[0x10000..], 256, 256, ExtendedColorType::Rgba8)
+                .unwrap();
+        }
+    }
+
+    Ok(())
+}
+
 pub fn splat_layer_exta<R: Read + Seek, P: AsRef<std::path::Path>>(
     db: &ClipDb,
     layer: LayerId,
     clip: &mut R,
     out_dir: P,
 ) -> std::io::Result<()> {
-    fs::create_dir_all(&out_dir)?;
+    fs::create_dir_all(&out_dir.as_ref())?;
 
     // i could do this as a join in sql but thats too much abstraction for now
     let vecs: Vec<VectorObjListMeta> = db
@@ -60,47 +119,12 @@ pub fn splat_layer_exta<R: Read + Seek, P: AsRef<std::path::Path>>(
         io::copy(&mut bytes, &mut f)?;
     }
 
-    let offsc: Vec<OffscreenMeta> = db
-        .get_offscreen_ids_for_layer(layer)
-        .map_err(into_io_err)?
-        .into_iter()
-        .map(|id| db.get_offscreen_meta(id).map_err(into_io_err))
-        .collect::<io::Result<_>>()?;
-
-    for o in offsc {
-        let mut attr = fs::File::create(
-            out_dir
-                .as_ref()
-                .join(format!("{}.offsc_attr.bin", o.exta_id.0)),
-        )?;
-
-        o.attribute.write(&mut attr).map_err(into_io_err)?;
-
-        let exta_off = db.get_exta_chunk_offset(o.exta_id.clone());
-        let Ok(offset) = exta_off else {
-            continue;
-        };
-
-        clip.seek(SeekFrom::Start(offset as _))?;
-
-        let _ = ExtaChunkHeader::read(clip).map_err(into_io_err)?;
-        let body = ExtaOffscreen::read(clip).map_err(into_io_err)?;
-
-        for (i, b) in body.blocks.into_iter().enumerate() {
-            let Some(data) = b.data else {
-                continue;
-            };
-
-            let p = out_dir
-                .as_ref()
-                .join(format!("{}.offsc_{}.bin", o.exta_id.0, i));
-
-            let mut dec = ZlibDecoder::new(data.compressed_data.as_slice());
-            let mut buffer = Vec::new();
-            dec.read_to_end(&mut buffer)?;
-
-            fs::write(p, buffer)?;
-        }
+    let info = db.get_layer(layer).map_err(into_io_err)?;
+    if let Ok(render) = db.get_base_mipmap_offscreen(info.render_mipmap_id) {
+        splat_offsc(db, render, clip, &out_dir.as_ref().join("render"), true)?;
+    };
+    if let Ok(mask) = db.get_base_mipmap_offscreen(info.mask_mipmap_id) {
+        splat_offsc(db, mask, clip, &out_dir.as_ref().join("mask"), false)?;
     }
 
     Ok(())
