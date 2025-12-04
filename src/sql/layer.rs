@@ -13,6 +13,64 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 #[binwrite]
 #[brw(big)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub struct ChannelLevels {
+    pub shadow: u16,
+    pub midtone: u16,
+    pub highlight: u16,
+    pub output_low: u16,
+    pub output_high: u16,
+}
+
+impl Default for ChannelLevels {
+    fn default() -> Self {
+        Self {
+            shadow: 0,
+            midtone: 0x7FFF,
+            highlight: u16::MAX,
+            output_low: 0,
+            output_high: u16::MAX,
+        }
+    }
+}
+
+#[binread]
+#[binwrite]
+#[brw(big)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub struct ChannelCurve {
+    #[br(assert(num_points <= 32))]
+    #[bw(assert(*num_points <= 32))]
+    pub num_points: u16,
+
+    pub points: [(u16, u16); 32],
+}
+
+impl Default for ChannelCurve {
+    fn default() -> Self {
+        let mut pts = [(0, 0); 32];
+        pts[1] = (u16::MAX, u16::MAX);
+
+        Self {
+            num_points: 2,
+            points: pts,
+        }
+    }
+}
+
+#[binread]
+#[binwrite]
+#[brw(big)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub struct ColorBalanceLevels {
+    pub cyan_red: i32,
+    pub magenta_green: i32,
+    pub yellow_blue: i32,
+}
+
+#[binread]
+#[binwrite]
+#[brw(big)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum FilterLayerInfo {
     // FilterLayerInfo
     // kind: u32
@@ -28,10 +86,36 @@ pub enum FilterLayerInfo {
     }, // 1
 
     #[brw(magic = 2u32)]
-    LevelCorrection, // 2 todo
+    LevelCorrection {
+        #[br(temp, assert(size == 320))]
+        #[bw(calc = 320)]
+        size: u32,
+
+        rgb: ChannelLevels,
+        r: ChannelLevels,
+        g: ChannelLevels,
+        b: ChannelLevels,
+
+        #[br(temp, ignore)]
+        #[bw(calc = [ChannelLevels::default(); 28])]
+        padding: [ChannelLevels; 28],
+    }, // 2
 
     #[brw(magic = 3u32)]
-    ToneCurve, // 3 todo
+    ToneCurve {
+        #[br(temp, assert(size == 4160))]
+        #[bw(calc = 4160)]
+        size: u32,
+
+        rgb: ChannelCurve,
+        r: ChannelCurve,
+        g: ChannelCurve,
+        b: ChannelCurve,
+
+        #[br(temp, ignore)]
+        #[bw(calc = [ChannelCurve::default(); 28])]
+        padding: [ChannelCurve; 28],
+    }, // 3
 
     #[brw(magic = 4u32)]
     Hsl {
@@ -44,7 +128,18 @@ pub enum FilterLayerInfo {
     }, // 4
 
     #[brw(magic = 5u32)]
-    ColorBalance, // 5 todo
+    ColorBalance {
+        #[br(temp, assert(size == 40))]
+        #[bw(calc = 40)]
+        size: u32,
+
+        // bool
+        keep_bright: u32,
+
+        shadow: ColorBalanceLevels,
+        midtone: ColorBalanceLevels,
+        highlight: ColorBalanceLevels,
+    }, // 5
 
     #[brw(magic = 6u32)]
     ReverseGradient, // 6
